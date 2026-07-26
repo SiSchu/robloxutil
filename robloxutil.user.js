@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Roblox Util
 // @namespace    https://github.com/SiSchu/robloxutil
-// @version      1.0.0
+// @version      1.0.1
 // @description  Loader for Roblox Util scripts (friends bulk unfriend + home game stats)
 // @author       SiSchu
 // @homepageURL  https://github.com/SiSchu/robloxutil
@@ -12,10 +12,10 @@
 // @match        https://www.roblox.com/*/home*
 // @run-at       document-idle
 // @grant        none
-// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/roblox-bulk-unfriend.user.js
-// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/roblox-home-game-stats.user.js
+// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/bulk-unfriend.js
+// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/home-game-stats.js
 // ==/UserScript==
 
-// Bundled via @require. Install only this script (disable any separate installs
-// of the child scripts to avoid running them twice). Bump @version here when
-// child scripts change so Tampermonkey re-fetches the requires.
+// Code lives in modules/ via @require. Install only this script (or individual
+// wrappers). Bump @version when modules change so Tampermonkey re-fetches them.
+console.info("[robloxutil] loader ready");
