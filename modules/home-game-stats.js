@@ -7,13 +7,20 @@
   const BATCH_SIZE = 50;
   const DEBOUNCE_MS = 400;
   const GAMES_API = "https://games.roblox.com/v1/games";
+  const STORAGE_KEY = "rbx-home-game-stats-cache-v1";
+  const CACHE_TTL_MS = 60_000;
 
-  /** @type {Map<number, { playing: number, visits: number }>} */
+  /**
+   * In-memory cache for this page load. Hydrated from localStorage once.
+   * Within a page load we never refetch an ID we already have (even past TTL).
+   * @type {Map<number, { playing: number, visits: number, fetchedAt: number }>}
+   */
   const cache = new Map();
   /** @type {Set<number>} */
   const inflight = new Set();
   let debounceTimer = 0;
   let observerStarted = false;
+  let persistTimer = 0;
 
   function ensureStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -30,12 +37,52 @@
         font-weight: 600;
       }
       .game-card-info .rbx-home-visits-label,
-      .wide-game-tile-metadata .rbx-home-visits-label,
-      .hover-metadata .rbx-home-visits-label {
+      .wide-game-tile-metadata .rbx-home-visits-label {
         font-weight: 500;
       }
     `;
     document.documentElement.appendChild(style);
+  }
+
+  function hydrateCacheFromStorage() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return;
+      const now = Date.now();
+      for (const [key, value] of Object.entries(parsed)) {
+        const id = Number(key);
+        if (!Number.isFinite(id) || !value || typeof value !== "object") continue;
+        const fetchedAt = Number(value.fetchedAt) || 0;
+        if (now - fetchedAt > CACHE_TTL_MS) continue;
+        cache.set(id, {
+          playing: Number(value.playing) || 0,
+          visits: Number(value.visits) || 0,
+          fetchedAt,
+        });
+      }
+    } catch {
+      /* ignore corrupt cache */
+    }
+  }
+
+  function schedulePersistCache() {
+    window.clearTimeout(persistTimer);
+    persistTimer = window.setTimeout(() => {
+      try {
+        /** @type {Record<string, { playing: number, visits: number, fetchedAt: number }>} */
+        const out = {};
+        const now = Date.now();
+        for (const [id, entry] of cache) {
+          if (now - entry.fetchedAt > CACHE_TTL_MS) continue;
+          out[String(id)] = entry;
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(out));
+      } catch {
+        /* quota / private mode */
+      }
+    }, 250);
   }
 
   /**
@@ -128,46 +175,45 @@
   }
 
   /**
+   * Visible base stats only — never write into .hover-metadata (avoids doubled hover stats).
    * @param {HTMLAnchorElement} link
-   * @param {{ playing: number, visits: number }} stats
+   * @returns {HTMLElement[]}
    */
-  function applyStatsToLink(link, stats) {
-    /** @type {HTMLElement[]} */
-    const infos = [];
-    const direct = link.querySelector(".game-card-info");
-    if (direct) infos.push(/** @type {HTMLElement} */ (direct));
+  function collectInfoTargets(link) {
+    /** @type {Set<HTMLElement>} */
+    const infos = new Set();
 
-    const meta = link.querySelector(".wide-game-tile-metadata");
-    if (meta) {
-      const base =
-        meta.querySelector(".base-metadata .game-card-info") ||
-        meta.querySelector(".game-card-info");
-      if (base) infos.push(/** @type {HTMLElement} */ (base));
-      let hover = meta.querySelector(".hover-metadata");
-      if (!hover) {
-        hover = document.createElement("div");
-        hover.className = "hover-metadata";
-        meta.appendChild(hover);
-      }
-      let hoverInfo = hover.querySelector(".game-card-info");
-      if (!hoverInfo) {
-        hoverInfo = document.createElement("div");
-        hoverInfo.className = "game-card-info";
-        hoverInfo.setAttribute("data-testid", "game-tile-stats-extra");
-        hover.appendChild(hoverInfo);
-      }
-      infos.push(/** @type {HTMLElement} */ (hoverInfo));
+    const wide = link.querySelector(".wide-game-tile-metadata");
+    if (wide) {
+      const baseInfo =
+        wide.querySelector(".base-metadata .game-card-info") ||
+        wide.querySelector(":scope > .base-metadata .game-card-info");
+      if (baseInfo instanceof HTMLElement) infos.add(baseInfo);
     }
 
-    if (!infos.length) {
+    for (const el of link.querySelectorAll(".game-card-info")) {
+      if (!(el instanceof HTMLElement)) continue;
+      if (el.closest(".hover-metadata")) continue;
+      infos.add(el);
+    }
+
+    if (!infos.size) {
       const fallback = document.createElement("div");
       fallback.className = "game-card-info";
       fallback.setAttribute("data-testid", "game-tile-stats");
       link.appendChild(fallback);
-      infos.push(fallback);
+      infos.add(fallback);
     }
 
-    for (const info of infos) applyStatsToInfo(info, stats);
+    return [...infos];
+  }
+
+  /**
+   * @param {HTMLAnchorElement} link
+   * @param {{ playing: number, visits: number }} stats
+   */
+  function applyStatsToLink(link, stats) {
+    for (const info of collectInfoTargets(link)) applyStatsToInfo(info, stats);
     link.setAttribute(MARK_ATTR, String(stats.playing) + ":" + String(stats.visits));
   }
 
@@ -184,14 +230,17 @@
     if (res.ok) {
       const json = await res.json();
       const rows = Array.isArray(json?.data) ? json.data : [];
+      const now = Date.now();
       for (const row of rows) {
         const id = Number(row.id);
         if (!Number.isFinite(id)) continue;
         cache.set(id, {
           playing: Number(row.playing) || 0,
           visits: Number(row.visits) || 0,
+          fetchedAt: now,
         });
       }
+      schedulePersistCache();
       return;
     }
     // Adaptive split if Roblox tightens the limit further.
@@ -208,6 +257,7 @@
    * @param {number[]} universeIds
    */
   async function fetchGames(universeIds) {
+    // Page-load cache: once we have an entry in memory, never refetch until reload.
     const missing = universeIds.filter((id) => !cache.has(id) && !inflight.has(id));
     if (!missing.length) return;
 
@@ -281,7 +331,12 @@
         window.setTimeout(run, 50);
         return;
       }
-      console.info("[robloxutil] home game stats active", location.pathname);
+      hydrateCacheFromStorage();
+      console.info(
+        "[robloxutil] home game stats active",
+        location.pathname,
+        `cached=${cache.size}`
+      );
       ensureStyles();
       startObserver();
       scheduleEnrich();
