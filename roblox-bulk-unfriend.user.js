@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Roblox Friends Bulk Unfriend
-// @namespace    https://github.com/local/smash-a-base
-// @version      1.5.3
+// @namespace    https://github.com/SiSchu/robloxutil
+// @version      1.5.4
 // @description  Custom Friends page with bulk unfriend, polished toasts + confirm modals
-// @author       local
+// @author       SiSchu
 // @match        https://www.roblox.com/users/friends*
 // @match        https://www.roblox.com/*/users/friends*
 // @run-at       document-idle
@@ -42,7 +42,12 @@
   let initialLoadStarted = false;
   let menuOutsideBound = false;
 
+  function isFriendsPage() {
+    return /\/users\/friends/i.test(location.pathname);
+  }
+
   function isFriendsTab() {
+    if (!isFriendsPage()) return false;
     const hash = (location.hash || "").toLowerCase();
     if (!hash || hash === "#" || hash === "#!") return true;
     if (hash.includes("friend-request")) return false;
@@ -1628,6 +1633,7 @@
   });
 
   function start() {
+    if (!isFriendsPage()) return;
     try {
       ensureStyles();
       ensureToastHost();

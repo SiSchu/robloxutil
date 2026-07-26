@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Roblox Home Game Stats
-// @namespace    https://github.com/local/smash-a-base
-// @version      1.0.0
+// @namespace    https://github.com/SiSchu/robloxutil
+// @version      1.0.1
 // @description  Show CCU + visits on all homepage game tiles (K/M/B, 2 decimals)
-// @author       local
+// @author       SiSchu
 // @match        https://www.roblox.com/home*
 // @match        https://www.roblox.com/*/home*
 // @run-at       document-idle
@@ -264,7 +264,12 @@
     obs.observe(document.body, { childList: true, subtree: true });
   }
 
+  function isHomePage() {
+    return /\/home(?:\/|$)/i.test(location.pathname);
+  }
+
   function boot() {
+    if (!isHomePage()) return;
     ensureStyles();
     startObserver();
     scheduleEnrich();
