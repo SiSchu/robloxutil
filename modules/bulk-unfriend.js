@@ -110,7 +110,7 @@
     const icon = document.createElement("span");
     icon.className = "rbx-bulk-toast-icon";
     icon.setAttribute("aria-hidden", "true");
-    icon.textContent = type === "success" ? "âœ“" : type === "error" ? "!" : "i";
+    icon.textContent = type === "success" ? "\u2713" : type === "error" ? "!" : "i";
 
     const msg = document.createElement("div");
     msg.className = "rbx-bulk-toast-msg";
@@ -242,7 +242,7 @@
       RATE_LIMIT_MAX_SEC,
       RATE_LIMIT_FALLBACK_SEC * Math.pow(2, Math.max(0, attempt - 1))
     );
-    // Prefer the longer wait â€” short Retry-After values often keep failing on Roblox
+    // Prefer the longer wait \u2014 short Retry-After values often keep failing on Roblox
     const wait = Math.max(RATE_LIMIT_MIN_SEC, fromHeader || 0, exponential);
     return Math.min(RATE_LIMIT_MAX_SEC, wait);
   }
@@ -254,13 +254,13 @@
    */
   async function waitForRetryAfter(res, context, attempt = 1) {
     let seconds = computeRateLimitWaitSeconds(res, attempt);
-    const prefix = context ? `${context} â€” ` : "";
+    const prefix = context ? `${context} \u2014 ` : "";
     while (seconds > 0) {
-      setStatus(`${prefix}429 rate limited, waiting ${seconds}sâ€¦`, true);
+      setStatus(`${prefix}429 rate limited, waiting ${seconds}s\u2026`, true);
       await sleep(1000);
       seconds -= 1;
     }
-    setStatus(`${prefix}Retryingâ€¦`);
+    setStatus(`${prefix}Retrying\u2026`);
   }
 
   function getTotalPages() {
@@ -946,7 +946,7 @@
 
   /**
    * Mount ONLY inside the Friends tab body (under "My Friends" + tabs).
-   * Never prepend to #content â€” that puts the panel above the page header.
+   * Never prepend to #content \u2014 that puts the panel above the page header.
    */
   function findMountPoint() {
     const friendsContent =
@@ -971,7 +971,7 @@
   function isCorrectlyMounted(root) {
     if (!root || !root.parentElement) return false;
     const parent = root.parentElement;
-    // Must live under friends-content or the friends tab pane â€” not as sibling of page-header
+    // Must live under friends-content or the friends tab pane \u2014 not as sibling of page-header
     if (parent.classList?.contains("friends-content")) return true;
     if (parent.id === "friends") return true;
     if (parent.classList?.contains("tab-pane") && parent.querySelector(".friends-content")) {
@@ -1089,7 +1089,7 @@
       if (!res.ok) {
         throw new Error(`Chat request failed (HTTP ${res.status})`);
       }
-      showToast("Chat started â€” check the chat panel.", "success");
+      showToast("Chat started \u2014 check the chat panel.", "success");
     } catch (err) {
       console.error(err);
       showToast(err.message || "Could not open chat.", "error");
@@ -1107,7 +1107,7 @@
     });
     if (!ok) return;
     try {
-      setStatus(`Unfriending ${label}â€¦`);
+      setStatus(`Unfriending ${label}\u2026`);
       await unfriendOne(friend.id, label);
       selectedIds.delete(friend.id);
       showToast(`You unfriended ${label}.`, "success");
@@ -1131,7 +1131,7 @@
     });
     if (!ok) return;
     try {
-      setStatus(`Unfollowing ${label}â€¦`);
+      setStatus(`Unfollowing ${label}\u2026`);
       await unfollowOne(friend.id, label);
       friend.isFollowing = false;
       showToast(`You unfollowed ${label}.`, "success");
@@ -1154,7 +1154,7 @@
     });
     if (!ok) return;
     try {
-      setStatus(`Following ${label}â€¦`);
+      setStatus(`Following ${label}\u2026`);
       await followOne(friend.id, label);
       friend.isFollowing = true;
       showToast(`You followed ${label}.`, "success");
@@ -1170,9 +1170,9 @@
   function pagerHtml(extraClass) {
     return `
       <div class="rbx-bulk-pager ${extraClass || ""}">
-        <button type="button" class="rbx-bulk-prev">â† Previous</button>
+        <button type="button" class="rbx-bulk-prev">\u2190 Previous</button>
         <span class="rbx-bulk-page-label">Page 1 of 1</span>
-        <button type="button" class="rbx-bulk-next">Next â†’</button>
+        <button type="button" class="rbx-bulk-next">Next \u2192</button>
       </div>
     `;
   }
@@ -1234,7 +1234,7 @@
       menuBtn.className = "rbx-bulk-menu-btn";
       menuBtn.setAttribute("aria-label", "Actions");
       menuBtn.title = "Actions";
-      menuBtn.textContent = "â‹¯";
+      menuBtn.textContent = "\u22EF";
       menuBtn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1344,7 +1344,7 @@
     if (busy) return;
     busy = true;
     updateSelectionUi();
-    setStatus("Loading friendsâ€¦");
+    setStatus("Loading friends\u2026");
 
     try {
       const userId = getMyUserId();
@@ -1410,7 +1410,7 @@
 
       renderCards();
       setStatus(
-        `${currentFriends.length} friends on page ${currentPage} of ${getTotalPages()} Â· ${totalFriendsCount} total`
+        `${currentFriends.length} friends on page ${currentPage} of ${getTotalPages()} \u00B7 ${totalFriendsCount} total`
       );
     } catch (err) {
       console.error("[rbx-bulk-unfriend]", err);
@@ -1445,7 +1445,7 @@
     for (const id of ids) {
       const friend = currentFriends.find((f) => f.id === id);
       const label = friendLabel(friend || { id });
-      setStatus(`Unfriending ${label}â€¦ (${done + failed + 1}/${ids.length})`);
+      setStatus(`Unfriending ${label}\u2026 (${done + failed + 1}/${ids.length})`);
       try {
         await unfriendOne(id, label);
         selectedIds.delete(id);
@@ -1472,7 +1472,7 @@
     }
     if (failed > 0) {
       showToast(
-        `${failed} unfriend${failed === 1 ? "" : "s"} failed${failedNames.length ? `: ${failedNames.slice(0, 3).join(", ")}${failedNames.length > 3 ? "â€¦" : ""}` : "."}`,
+        `${failed} unfriend${failed === 1 ? "" : "s"} failed${failedNames.length ? `: ${failedNames.slice(0, 3).join(", ")}${failedNames.length > 3 ? "\u2026" : ""}` : "."}`,
         "error",
         5000
       );
@@ -1646,4 +1646,3 @@
     start();
   }
 })();
-

@@ -43,7 +43,7 @@
    */
   function formatAbbrev(n) {
     const num = Number(n);
-    if (!Number.isFinite(num) || num < 0) return "â€”";
+    if (!Number.isFinite(num) || num < 0) return "\u2014";
     if (num < 1000) return String(Math.round(num));
     const units = [
       { v: 1e9, s: "B" },
@@ -110,7 +110,7 @@
       sep = document.createElement("span");
       sep.className = "info-label rbx-home-stats-sep";
       sep.setAttribute("aria-hidden", "true");
-      sep.textContent = "Â·";
+      sep.textContent = "\u00B7";
       info.appendChild(sep);
     }
 
@@ -258,11 +258,20 @@
 
   function boot() {
     if (!isHomePage()) return;
-    ensureStyles();
-    startObserver();
-    scheduleEnrich();
-    window.setTimeout(scheduleEnrich, 1200);
-    window.setTimeout(scheduleEnrich, 3000);
+    const run = () => {
+      if (!document.body) {
+        window.setTimeout(run, 50);
+        return;
+      }
+      console.info("[robloxutil] home game stats active", location.pathname);
+      ensureStyles();
+      startObserver();
+      scheduleEnrich();
+      window.setTimeout(scheduleEnrich, 1200);
+      window.setTimeout(scheduleEnrich, 3000);
+      window.setTimeout(scheduleEnrich, 6000);
+    };
+    run();
   }
 
   if (document.readyState === "loading") {
@@ -271,4 +280,3 @@
     boot();
   }
 })();
-
