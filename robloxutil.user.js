@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Roblox Util
 // @namespace    https://github.com/SiSchu/robloxutil
-// @version      1.0.2
+// @version      1.0.3
 // @description  Loader for Roblox Util scripts (friends bulk unfriend + home game stats)
 // @author       SiSchu
 // @homepageURL  https://github.com/SiSchu/robloxutil
@@ -18,8 +18,8 @@
 // @match        https://web.roblox.com/*/home*
 // @run-at       document-idle
 // @grant        none
-// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/bulk-unfriend.js?v=1.0.2
-// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/home-game-stats.js?v=1.0.2
+// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/bulk-unfriend.js?v=1.0.3
+// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/home-game-stats.js?v=1.0.3
 // ==/UserScript==
 
 // Code lives in modules/ via @require. Install only this script.

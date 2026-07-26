@@ -3,7 +3,8 @@
 
   const STYLE_ID = "rbx-home-game-stats-style";
   const MARK_ATTR = "data-rbx-home-stats";
-  const BATCH_SIZE = 100;
+  // Roblox returns 400 "Too many universe IDs were requested" above ~50.
+  const BATCH_SIZE = 50;
   const DEBOUNCE_MS = 400;
   const GAMES_API = "https://games.roblox.com/v1/games";
 
@@ -171,6 +172,39 @@
   }
 
   /**
+   * @param {number[]} chunk
+   */
+  async function fetchGamesChunk(chunk) {
+    if (!chunk.length) return;
+    const url = `${GAMES_API}?universeIds=${chunk.join(",")}`;
+    const res = await fetch(url, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const rows = Array.isArray(json?.data) ? json.data : [];
+      for (const row of rows) {
+        const id = Number(row.id);
+        if (!Number.isFinite(id)) continue;
+        cache.set(id, {
+          playing: Number(row.playing) || 0,
+          visits: Number(row.visits) || 0,
+        });
+      }
+      return;
+    }
+    // Adaptive split if Roblox tightens the limit further.
+    if (res.status === 400 && chunk.length > 1) {
+      const mid = Math.ceil(chunk.length / 2);
+      await fetchGamesChunk(chunk.slice(0, mid));
+      await fetchGamesChunk(chunk.slice(mid));
+      return;
+    }
+    console.warn("[robloxutil] games API failed", res.status, chunk.length);
+  }
+
+  /**
    * @param {number[]} universeIds
    */
   async function fetchGames(universeIds) {
@@ -181,23 +215,7 @@
 
     try {
       for (let i = 0; i < missing.length; i += BATCH_SIZE) {
-        const chunk = missing.slice(i, i + BATCH_SIZE);
-        const url = `${GAMES_API}?universeIds=${chunk.join(",")}`;
-        const res = await fetch(url, {
-          credentials: "include",
-          headers: { Accept: "application/json" },
-        });
-        if (!res.ok) continue;
-        const json = await res.json();
-        const rows = Array.isArray(json?.data) ? json.data : [];
-        for (const row of rows) {
-          const id = Number(row.id);
-          if (!Number.isFinite(id)) continue;
-          cache.set(id, {
-            playing: Number(row.playing) || 0,
-            visits: Number(row.visits) || 0,
-          });
-        }
+        await fetchGamesChunk(missing.slice(i, i + BATCH_SIZE));
       }
     } finally {
       for (const id of missing) inflight.delete(id);
