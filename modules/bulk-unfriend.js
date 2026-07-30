@@ -2,9 +2,19 @@
   "use strict";
 
   const STORAGE_KEY = "rbx-bulk-unfriend-page-size";
+  const SORT_STORAGE_KEY = "rbx-bulk-unfriend-sort";
   const API_MAX_LIMIT = 50;
   const PAGE_SIZE_OPTIONS = [20, 50, 100];
   const DEFAULT_PAGE_SIZE = 50;
+  /** @type {readonly ["online", "name-asc", "name-desc", "frequent"][]} */
+  const SORT_OPTIONS = ["online", "name-asc", "name-desc", "frequent"];
+  const DEFAULT_SORT = "online";
+  const SORT_LABELS = {
+    online: "Online first",
+    "name-asc": "Name A\u2013Z",
+    "name-desc": "Name Z\u2013A",
+    frequent: "Frequent",
+  };
   const UNFRIEND_DELAY_MS = 1500;
   const RATE_LIMIT_FALLBACK_SEC = 30;
   const RATE_LIMIT_MIN_SEC = 15;
@@ -32,12 +42,16 @@
    */
   /** @type {FriendRow[]} */
   let currentFriends = [];
+  /** API order for the current page (Roblox userSort). */
+  /** @type {number[]} */
+  let apiOrderIds = [];
 
   /** @type {Record<number, { key: string, label: string, color: string }>} */
   const PRESENCE_META = {
     0: { key: "offline", label: "Offline", color: "#8b939e" },
     1: { key: "online", label: "Online", color: "#3dd68c" },
-    2: { key: "ingame", label: "In Game", color: "#4ea1ff" },
+    // Same green family as Online — In Game is still "online", blue was only for visual split.
+    2: { key: "ingame", label: "In Game", color: "#22c55e" },
     3: { key: "studio", label: "In Studio", color: "#c084fc" },
     4: { key: "invisible", label: "Invisible", color: "#8b939e" },
   };
@@ -78,6 +92,68 @@
     const size = PAGE_SIZE_OPTIONS.includes(n) ? n : DEFAULT_PAGE_SIZE;
     localStorage.setItem(STORAGE_KEY, String(size));
     return size;
+  }
+
+  function getSortMode() {
+    const raw = String(localStorage.getItem(SORT_STORAGE_KEY) || "");
+    if (SORT_OPTIONS.includes(/** @type {any} */ (raw))) return /** @type {typeof SORT_OPTIONS[number]} */ (raw);
+    return DEFAULT_SORT;
+  }
+
+  function setSortMode(value) {
+    const mode = SORT_OPTIONS.includes(/** @type {any} */ (value))
+      ? /** @type {typeof SORT_OPTIONS[number]} */ (value)
+      : DEFAULT_SORT;
+    localStorage.setItem(SORT_STORAGE_KEY, mode);
+    return mode;
+  }
+
+  /**
+   * Lower = higher in "Online first" list.
+   * @param {FriendRow} friend
+   */
+  function presenceSortRank(friend) {
+    const type = Number(friend.presenceType);
+    if (type === 2) return 0; // In Game
+    if (type === 1) return 1; // Online
+    if (type === 3) return 2; // Studio
+    if (type === 4) return 3; // Invisible
+    return 4; // Offline / unknown
+  }
+
+  function sortFriendsInPlace() {
+    const mode = getSortMode();
+    if (mode === "frequent") {
+      const rank = new Map(apiOrderIds.map((id, i) => [id, i]));
+      currentFriends.sort((a, b) => (rank.get(a.id) ?? 9999) - (rank.get(b.id) ?? 9999));
+      return;
+    }
+    if (mode === "online") {
+      currentFriends.sort((a, b) => {
+        const pr = presenceSortRank(a) - presenceSortRank(b);
+        if (pr !== 0) return pr;
+        return friendLabel(a).localeCompare(friendLabel(b), undefined, { sensitivity: "base" });
+      });
+      return;
+    }
+    if (mode === "name-asc") {
+      currentFriends.sort((a, b) =>
+        friendLabel(a).localeCompare(friendLabel(b), undefined, { sensitivity: "base" })
+      );
+      return;
+    }
+    if (mode === "name-desc") {
+      currentFriends.sort((a, b) =>
+        friendLabel(b).localeCompare(friendLabel(a), undefined, { sensitivity: "base" })
+      );
+    }
+  }
+
+  function syncSortButtons() {
+    const mode = getSortMode();
+    document.querySelectorAll(`#${ROOT_ID} .rbx-bulk-sort-btn`).forEach((btn) => {
+      btn.classList.toggle("active", btn.getAttribute("data-sort") === mode);
+    });
   }
 
   function getMyUserId() {
@@ -834,13 +910,15 @@
         font-weight: 700;
         margin-right: 6px;
       }
-      #${ROOT_ID} .rbx-bulk-size-group {
+      #${ROOT_ID} .rbx-bulk-size-group,
+      #${ROOT_ID} .rbx-bulk-sort-group {
         display: inline-flex;
         border: 1px solid var(--bulk-border);
         border-radius: 10px;
         overflow: hidden;
       }
-      #${ROOT_ID} .rbx-bulk-size-btn {
+      #${ROOT_ID} .rbx-bulk-size-btn,
+      #${ROOT_ID} .rbx-bulk-sort-btn {
         border: none;
         border-radius: 0;
         border-right: 1px solid var(--bulk-border);
@@ -848,8 +926,16 @@
         color: var(--bulk-muted);
         min-width: 48px;
       }
-      #${ROOT_ID} .rbx-bulk-size-btn:last-child { border-right: none; }
-      #${ROOT_ID} .rbx-bulk-size-btn.active {
+      #${ROOT_ID} .rbx-bulk-sort-btn {
+        min-width: 0;
+        padding-left: 10px;
+        padding-right: 10px;
+        white-space: nowrap;
+      }
+      #${ROOT_ID} .rbx-bulk-size-btn:last-child,
+      #${ROOT_ID} .rbx-bulk-sort-btn:last-child { border-right: none; }
+      #${ROOT_ID} .rbx-bulk-size-btn.active,
+      #${ROOT_ID} .rbx-bulk-sort-btn.active {
         background: var(--bulk-accent);
         color: #0b1220;
         font-weight: 700;
@@ -964,8 +1050,8 @@
       }
       #${ROOT_ID} .rbx-bulk-presence-dot.offline,
       #${ROOT_ID} .rbx-bulk-presence-dot.invisible { background: #8b939e; }
-      #${ROOT_ID} .rbx-bulk-presence-dot.online { background: #3dd68c; }
-      #${ROOT_ID} .rbx-bulk-presence-dot.ingame { background: #4ea1ff; }
+      #${ROOT_ID} .rbx-bulk-presence-dot.online,
+      #${ROOT_ID} .rbx-bulk-presence-dot.ingame { background: #3dd68c; }
       #${ROOT_ID} .rbx-bulk-presence-dot.studio { background: #c084fc; }
       #${ROOT_ID} .rbx-bulk-card .meta {
         min-width: 0;
@@ -1011,8 +1097,8 @@
       }
       #${ROOT_ID} .rbx-bulk-card a.presence-link { cursor: pointer; }
       #${ROOT_ID} .rbx-bulk-card a.presence-link:hover { text-decoration: underline; }
-      #${ROOT_ID} .rbx-bulk-card .presence-link.online { color: #3dd68c; }
-      #${ROOT_ID} .rbx-bulk-card .presence-link.ingame { color: #7cbcff; }
+      #${ROOT_ID} .rbx-bulk-card .presence-link.online,
+      #${ROOT_ID} .rbx-bulk-card .presence-link.ingame { color: #3dd68c; }
       #${ROOT_ID} .rbx-bulk-card .presence-link.studio { color: #d4a8ff; }
       #${ROOT_ID} .rbx-bulk-card .presence-link.offline,
       #${ROOT_ID} .rbx-bulk-card .presence-link.invisible { color: #8b939e; }
@@ -1608,13 +1694,16 @@
           universeId: presence?.universeId ?? null,
         };
       });
+      apiOrderIds = ids.slice();
+      sortFriendsInPlace();
 
       const visible = new Set(ids);
       selectedIds = new Set([...selectedIds].filter((id) => visible.has(id)));
 
       renderCards();
+      syncSortButtons();
       setStatus(
-        `${currentFriends.length} friends on page ${currentPage} of ${getTotalPages()} \u00B7 ${totalFriendsCount} total`
+        `${currentFriends.length} friends on page ${currentPage} of ${getTotalPages()} \u00B7 ${totalFriendsCount} total \u00B7 ${SORT_LABELS[getSortMode()]}`
       );
     } catch (err) {
       console.error("[rbx-bulk-unfriend]", err);
@@ -1702,6 +1791,16 @@
     const sizeButtons = PAGE_SIZE_OPTIONS.map(
       (n) => `<button type="button" class="rbx-bulk-size-btn" data-size="${n}">${n}</button>`
     ).join("");
+    const sortButtons = SORT_OPTIONS.map(
+      (mode) =>
+        `<button type="button" class="rbx-bulk-sort-btn" data-sort="${mode}" title="${
+          mode === "frequent"
+            ? "Roblox frequent / FriendScore order from the API"
+            : mode === "online"
+              ? "In Game, Online, Studio, then Offline"
+              : SORT_LABELS[mode]
+        }">${SORT_LABELS[mode]}</button>`
+    ).join("");
 
     root = document.createElement("div");
     root.id = ROOT_ID;
@@ -1710,6 +1809,8 @@
         <span class="rbx-bulk-title">Friends list</span>
         <span class="rbx-bulk-meta">Per page</span>
         <div class="rbx-bulk-size-group">${sizeButtons}</div>
+        <span class="rbx-bulk-meta">Sort</span>
+        <div class="rbx-bulk-sort-group">${sortButtons}</div>
         <button type="button" id="rbx-bulk-select-all">Select all</button>
         <button type="button" id="rbx-bulk-select-none">Clear selection</button>
         <button type="button" id="rbx-bulk-unfriend-btn">Unfriend selected (0)</button>
@@ -1749,6 +1850,22 @@
         }
       });
     });
+    root.querySelectorAll(".rbx-bulk-sort-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        try {
+          setSortMode(btn.getAttribute("data-sort"));
+          syncSortButtons();
+          sortFriendsInPlace();
+          renderCards();
+          updateSelectionUi();
+          setStatus(
+            `${currentFriends.length} friends on page ${currentPage} of ${getTotalPages()} \u00B7 ${totalFriendsCount} total \u00B7 ${SORT_LABELS[getSortMode()]}`
+          );
+        } catch (err) {
+          showToast(err.message || "Could not change sort.", "error");
+        }
+      });
+    });
     root.querySelector("#rbx-bulk-select-all").addEventListener("click", () => {
       for (const f of currentFriends) selectedIds.add(f.id);
       renderCards();
@@ -1773,6 +1890,7 @@
     });
 
     syncPageSizeButtons();
+    syncSortButtons();
     updateSelectionUi();
   }
 
