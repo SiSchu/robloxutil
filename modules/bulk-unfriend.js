@@ -6,14 +6,14 @@
   const API_MAX_LIMIT = 50;
   const PAGE_SIZE_OPTIONS = [20, 50, 100];
   const DEFAULT_PAGE_SIZE = 50;
-  /** @type {readonly ["online", "name-asc", "name-desc", "frequent"][]} */
-  const SORT_OPTIONS = ["online", "name-asc", "name-desc", "frequent"];
+  /** @type {readonly ["online", "frequent", "name-asc", "name-desc"][]} */
+  const SORT_OPTIONS = ["online", "frequent", "name-asc", "name-desc"];
   const DEFAULT_SORT = "online";
   const SORT_LABELS = {
-    online: "Online first",
+    online: "Online \u2192 Freq \u2192 A\u2013Z",
+    frequent: "Frequent",
     "name-asc": "Name A\u2013Z",
     "name-desc": "Name Z\u2013A",
-    frequent: "Frequent",
   };
   const UNFRIEND_DELAY_MS = 1500;
   const RATE_LIMIT_FALLBACK_SEC = 30;
@@ -122,29 +122,36 @@
 
   function sortFriendsInPlace() {
     const mode = getSortMode();
+    const apiRank = new Map(apiOrderIds.map((id, i) => [id, i]));
+    const byNameAsc = (a, b) =>
+      friendLabel(a).localeCompare(friendLabel(b), undefined, { sensitivity: "base" });
+    const byFrequent = (a, b) => (apiRank.get(a.id) ?? 9999) - (apiRank.get(b.id) ?? 9999);
+
     if (mode === "frequent") {
-      const rank = new Map(apiOrderIds.map((id, i) => [id, i]));
-      currentFriends.sort((a, b) => (rank.get(a.id) ?? 9999) - (rank.get(b.id) ?? 9999));
+      currentFriends.sort((a, b) => {
+        const fr = byFrequent(a, b);
+        if (fr !== 0) return fr;
+        return byNameAsc(a, b);
+      });
       return;
     }
     if (mode === "online") {
+      // Presence -> Frequent (Roblox order) -> A-Z
       currentFriends.sort((a, b) => {
         const pr = presenceSortRank(a) - presenceSortRank(b);
         if (pr !== 0) return pr;
-        return friendLabel(a).localeCompare(friendLabel(b), undefined, { sensitivity: "base" });
+        const fr = byFrequent(a, b);
+        if (fr !== 0) return fr;
+        return byNameAsc(a, b);
       });
       return;
     }
     if (mode === "name-asc") {
-      currentFriends.sort((a, b) =>
-        friendLabel(a).localeCompare(friendLabel(b), undefined, { sensitivity: "base" })
-      );
+      currentFriends.sort(byNameAsc);
       return;
     }
     if (mode === "name-desc") {
-      currentFriends.sort((a, b) =>
-        friendLabel(b).localeCompare(friendLabel(a), undefined, { sensitivity: "base" })
-      );
+      currentFriends.sort((a, b) => byNameAsc(b, a));
     }
   }
 
@@ -1821,10 +1828,10 @@
     const sortButtons = SORT_OPTIONS.map(
       (mode) =>
         `<button type="button" class="rbx-bulk-sort-btn" data-sort="${mode}" title="${
-          mode === "frequent"
-            ? "Roblox frequent / FriendScore order from the API"
-            : mode === "online"
-              ? "In Game, Online, Studio, then Offline"
+          mode === "online"
+            ? "1) Online status  2) Roblox frequent/FriendScore  3) Name A\u2013Z"
+            : mode === "frequent"
+              ? "Roblox frequent / FriendScore order, then A\u2013Z"
               : SORT_LABELS[mode]
         }">${SORT_LABELS[mode]}</button>`
     ).join("");
