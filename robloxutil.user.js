@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Roblox Util
 // @namespace    https://github.com/SiSchu/robloxutil
-// @version      1.0.7
+// @version      1.0.8
 // @description  Loader for Roblox Util scripts (friends bulk unfriend + home game stats)
 // @author       SiSchu
 // @homepageURL  https://github.com/SiSchu/robloxutil
@@ -18,8 +18,8 @@
 // @match        https://web.roblox.com/*/home*
 // @run-at       document-idle
 // @grant        none
-// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/bulk-unfriend.js?v=1.0.7
-// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/home-game-stats.js?v=1.0.7
+// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/bulk-unfriend.js?v=1.0.8
+// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/home-game-stats.js?v=1.0.8
 // ==/UserScript==
 
 (function () {
@@ -33,7 +33,7 @@
   const LOCAL_VERSION =
     typeof GM_info !== "undefined" && GM_info?.script?.version
       ? String(GM_info.script.version)
-      : "1.0.7";
+      : "1.0.8";
 
   console.info("[robloxutil] loader ready", LOCAL_VERSION, location.pathname);
 

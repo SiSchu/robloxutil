@@ -49,9 +49,8 @@
   /** @type {Record<number, { key: string, label: string, color: string }>} */
   const PRESENCE_META = {
     0: { key: "offline", label: "Offline", color: "#8b939e" },
-    1: { key: "online", label: "Online", color: "#3dd68c" },
-    // Same green family as Online — In Game is still "online", blue was only for visual split.
-    2: { key: "ingame", label: "In Game", color: "#22c55e" },
+    1: { key: "online", label: "Online", color: "#4ea1ff" },
+    2: { key: "ingame", label: "In Game", color: "#3dd68c" },
     3: { key: "studio", label: "In Studio", color: "#c084fc" },
     4: { key: "invisible", label: "Invisible", color: "#8b939e" },
   };
@@ -657,6 +656,20 @@
     return { ...meta, text, href, placeId };
   }
 
+  /** @param {string} key */
+  function createPresenceMark(key) {
+    const mark = document.createElement("span");
+    mark.className = "presence-mark" + (key === "ingame" ? " controller" : "");
+    mark.setAttribute("aria-hidden", "true");
+    if (key === "ingame") {
+      mark.innerHTML =
+        '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">' +
+        '<path d="M4.8 3.2h6.4c1.9 0 3.4 1.4 3.6 3.2l.5 3.6c.2 1.5-1 2.8-2.5 2.8h-.7c-.6 0-1.1-.3-1.4-.8L10 10.4H6L5.3 11.999c-.3.5-.8.8-1.4.8h-.7c-1.5 0-2.7-1.3-2.5-2.8l.5-3.6c.2-1.8 1.7-3.2 3.6-3.2zm1.2 2.4a.8.8 0 100 1.6.8.8 0 000-1.6zm1.2 1.2a.8.8 0 10-1.6 0 .8.8 0 001.6 0zm4.4-.4a.6.6 0 110 1.2.6.6 0 010-1.2zm1.2 1.2a.6.6 0 11-1.2 0 .6.6 0 011.2 0z"/>' +
+        "</svg>";
+    }
+    return mark;
+  }
+
   /** @returns {Promise<Record<number, boolean>>} */
   async function fetchFollowingMap(ids) {
     /** @type {Record<number, boolean>} */
@@ -1050,7 +1063,7 @@
       }
       #${ROOT_ID} .rbx-bulk-presence-dot.offline,
       #${ROOT_ID} .rbx-bulk-presence-dot.invisible { background: #8b939e; }
-      #${ROOT_ID} .rbx-bulk-presence-dot.online,
+      #${ROOT_ID} .rbx-bulk-presence-dot.online { background: #4ea1ff; }
       #${ROOT_ID} .rbx-bulk-presence-dot.ingame { background: #3dd68c; }
       #${ROOT_ID} .rbx-bulk-presence-dot.studio { background: #c084fc; }
       #${ROOT_ID} .rbx-bulk-card .meta {
@@ -1097,7 +1110,7 @@
       }
       #${ROOT_ID} .rbx-bulk-card a.presence-link { cursor: pointer; }
       #${ROOT_ID} .rbx-bulk-card a.presence-link:hover { text-decoration: underline; }
-      #${ROOT_ID} .rbx-bulk-card .presence-link.online,
+      #${ROOT_ID} .rbx-bulk-card .presence-link.online { color: #7cbcff; }
       #${ROOT_ID} .rbx-bulk-card .presence-link.ingame { color: #3dd68c; }
       #${ROOT_ID} .rbx-bulk-card .presence-link.studio { color: #d4a8ff; }
       #${ROOT_ID} .rbx-bulk-card .presence-link.offline,
@@ -1108,6 +1121,22 @@
         border-radius: 50%;
         flex-shrink: 0;
         background: currentColor;
+      }
+      #${ROOT_ID} .rbx-bulk-card .presence-link .presence-mark.controller {
+        width: 12px;
+        height: 12px;
+        border-radius: 0;
+        background: transparent;
+        color: inherit;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #${ROOT_ID} .rbx-bulk-card .presence-link .presence-mark.controller svg {
+        width: 12px;
+        height: 12px;
+        display: block;
+        fill: currentColor;
       }
       #${ROOT_ID} .rbx-bulk-menu-wrap {
         position: relative;
@@ -1490,9 +1519,7 @@
       } else {
         presenceEl.title = presence.label;
       }
-      const presenceMark = document.createElement("span");
-      presenceMark.className = "presence-mark";
-      presenceMark.setAttribute("aria-hidden", "true");
+      const presenceMark = createPresenceMark(presence.key);
       const presenceText = document.createElement("span");
       presenceText.textContent =
         presence.key === "ingame" && presence.text !== presence.label

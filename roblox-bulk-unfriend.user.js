@@ -11,5 +11,5 @@
 // @match        https://web.roblox.com/*/users/friends*
 // @run-at       document-idle
 // @grant        none
-// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/bulk-unfriend.js?v=1.0.7
+// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/bulk-unfriend.js?v=1.0.8
 // ==/UserScript==
