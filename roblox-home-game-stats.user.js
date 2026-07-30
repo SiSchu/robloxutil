@@ -11,5 +11,5 @@
 // @match        https://web.roblox.com/*/home*
 // @run-at       document-idle
 // @grant        none
-// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/home-game-stats.js?v=1.0.5
+// @require      https://raw.githubusercontent.com/SiSchu/robloxutil/main/modules/home-game-stats.js?v=1.0.6
 // ==/UserScript==

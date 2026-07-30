@@ -16,8 +16,31 @@
   const TOAST_HOST_ID = "rbx-bulk-toast-host";
   const MODAL_ID = "rbx-bulk-modal-root";
 
-  /** @type {{ id: number, name?: string, displayName?: string, imageUrl?: string, isFollowing?: boolean }[]} */
+  /**
+   * @typedef {{
+   *   id: number,
+   *   name?: string,
+   *   displayName?: string,
+   *   imageUrl?: string,
+   *   isFollowing?: boolean,
+   *   presenceType?: number,
+   *   lastLocation?: string,
+   *   placeId?: number|null,
+   *   rootPlaceId?: number|null,
+   *   universeId?: number|null,
+   * }} FriendRow
+   */
+  /** @type {FriendRow[]} */
   let currentFriends = [];
+
+  /** @type {Record<number, { key: string, label: string, color: string }>} */
+  const PRESENCE_META = {
+    0: { key: "offline", label: "Offline", color: "#8b939e" },
+    1: { key: "online", label: "Online", color: "#3dd68c" },
+    2: { key: "ingame", label: "In Game", color: "#4ea1ff" },
+    3: { key: "studio", label: "In Studio", color: "#c084fc" },
+    4: { key: "invisible", label: "Invisible", color: "#8b939e" },
+  };
   /** @type {Set<number>} */
   let selectedIds = new Set();
   let pageCursor = "";
@@ -476,6 +499,88 @@
     await postFriendsAction("follow", targetUserId, `Following ${label}`);
   }
 
+  /**
+   * @param {number[]} ids
+   * @returns {Promise<Record<number, {
+   *   presenceType: number,
+   *   lastLocation?: string,
+   *   placeId?: number|null,
+   *   rootPlaceId?: number|null,
+   *   universeId?: number|null,
+   * }>>}
+   */
+  async function fetchPresenceMap(ids) {
+    /** @type {Record<number, {
+     *   presenceType: number,
+     *   lastLocation?: string,
+     *   placeId?: number|null,
+     *   rootPlaceId?: number|null,
+     *   universeId?: number|null,
+     * }>} */
+    const map = {};
+    if (!ids.length) return map;
+
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100);
+      try {
+        const res = await apiFetchWith429(
+          "https://presence.roblox.com/v1/presence/users",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userIds: chunk }),
+          },
+          "Loading presence"
+        );
+        if (!res.ok) continue;
+        const data = await res.json();
+        for (const row of data.userPresences || []) {
+          const id = Number(row.userId);
+          if (!Number.isFinite(id)) continue;
+          map[id] = {
+            presenceType: Number(row.userPresenceType) || 0,
+            lastLocation: row.lastLocation || "",
+            placeId: row.placeId != null ? Number(row.placeId) : null,
+            rootPlaceId: row.rootPlaceId != null ? Number(row.rootPlaceId) : null,
+            universeId: row.universeId != null ? Number(row.universeId) : null,
+          };
+        }
+      } catch (err) {
+        console.warn("[rbx-bulk] presence failed", err);
+      }
+    }
+    return map;
+  }
+
+  /**
+   * @param {FriendRow} friend
+   */
+  function presenceInfo(friend) {
+    const type = Number(friend.presenceType);
+    const meta = PRESENCE_META[Number.isFinite(type) ? type : 0] || PRESENCE_META[0];
+    const placeId =
+      (Number.isFinite(Number(friend.placeId)) && Number(friend.placeId) > 0
+        ? Number(friend.placeId)
+        : null) ||
+      (Number.isFinite(Number(friend.rootPlaceId)) && Number(friend.rootPlaceId) > 0
+        ? Number(friend.rootPlaceId)
+        : null);
+    const location = String(friend.lastLocation || "").trim();
+    let text = meta.label;
+    if (meta.key === "ingame" && location) text = location;
+    else if (meta.key === "studio" && location && location.toLowerCase() !== "studio") {
+      text = `Studio \u00B7 ${location}`;
+    }
+    /** @type {string|null} */
+    let href = null;
+    if (meta.key === "ingame" && placeId) {
+      href = `https://www.roblox.com/games/${placeId}`;
+    } else if (meta.key === "online" || meta.key === "studio" || meta.key === "invisible") {
+      href = profileUrl(friend.id);
+    }
+    return { ...meta, text, href, placeId };
+  }
+
   /** @returns {Promise<Record<number, boolean>>} */
   async function fetchFollowingMap(ids) {
     /** @type {Record<number, boolean>} */
@@ -823,8 +928,13 @@
         accent-color: var(--bulk-accent);
         cursor: pointer;
       }
-      #${ROOT_ID} .rbx-bulk-avatar-link {
+      #${ROOT_ID} .rbx-bulk-avatar-wrap {
+        position: relative;
         flex-shrink: 0;
+        width: 52px;
+        height: 52px;
+      }
+      #${ROOT_ID} .rbx-bulk-avatar-link {
         display: block;
         border-radius: 50%;
         overflow: hidden;
@@ -841,6 +951,22 @@
         object-fit: cover;
         background: #111;
       }
+      #${ROOT_ID} .rbx-bulk-presence-dot {
+        position: absolute;
+        right: 1px;
+        bottom: 1px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid #1a1d24;
+        box-sizing: border-box;
+        pointer-events: none;
+      }
+      #${ROOT_ID} .rbx-bulk-presence-dot.offline,
+      #${ROOT_ID} .rbx-bulk-presence-dot.invisible { background: #8b939e; }
+      #${ROOT_ID} .rbx-bulk-presence-dot.online { background: #3dd68c; }
+      #${ROOT_ID} .rbx-bulk-presence-dot.ingame { background: #4ea1ff; }
+      #${ROOT_ID} .rbx-bulk-presence-dot.studio { background: #c084fc; }
       #${ROOT_ID} .rbx-bulk-card .meta {
         min-width: 0;
         flex: 1;
@@ -849,7 +975,8 @@
         gap: 2px;
       }
       #${ROOT_ID} .rbx-bulk-card .name-link,
-      #${ROOT_ID} .rbx-bulk-card .user-link {
+      #${ROOT_ID} .rbx-bulk-card .user-link,
+      #${ROOT_ID} .rbx-bulk-card .presence-link {
         text-decoration: none;
         white-space: nowrap;
         overflow: hidden;
@@ -867,6 +994,35 @@
         color: var(--bulk-muted);
       }
       #${ROOT_ID} .rbx-bulk-card .user-link:hover { color: #c5ccd6; }
+      #${ROOT_ID} .rbx-bulk-card .presence-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 1px;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.2;
+        max-width: 100%;
+        border: none;
+        background: transparent;
+        padding: 0;
+        cursor: default;
+        color: var(--bulk-muted);
+      }
+      #${ROOT_ID} .rbx-bulk-card a.presence-link { cursor: pointer; }
+      #${ROOT_ID} .rbx-bulk-card a.presence-link:hover { text-decoration: underline; }
+      #${ROOT_ID} .rbx-bulk-card .presence-link.online { color: #3dd68c; }
+      #${ROOT_ID} .rbx-bulk-card .presence-link.ingame { color: #7cbcff; }
+      #${ROOT_ID} .rbx-bulk-card .presence-link.studio { color: #d4a8ff; }
+      #${ROOT_ID} .rbx-bulk-card .presence-link.offline,
+      #${ROOT_ID} .rbx-bulk-card .presence-link.invisible { color: #8b939e; }
+      #${ROOT_ID} .rbx-bulk-card .presence-link .presence-mark {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: currentColor;
+      }
       #${ROOT_ID} .rbx-bulk-menu-wrap {
         position: relative;
         flex-shrink: 0;
@@ -1205,6 +1361,10 @@
         updateSelectionUi();
       });
 
+      const presence = presenceInfo(friend);
+
+      const avatarWrap = document.createElement("div");
+      avatarWrap.className = "rbx-bulk-avatar-wrap";
       const avatarLink = document.createElement("a");
       avatarLink.className = "rbx-bulk-avatar-link";
       avatarLink.href = profileUrl(friend.id);
@@ -1213,6 +1373,10 @@
       img.alt = friendLabel(friend);
       img.src = friend.imageUrl || placeholder;
       avatarLink.appendChild(img);
+      const presenceDot = document.createElement("span");
+      presenceDot.className = `rbx-bulk-presence-dot ${presence.key}`;
+      presenceDot.title = presence.label;
+      avatarWrap.append(avatarLink, presenceDot);
 
       const meta = document.createElement("div");
       meta.className = "meta";
@@ -1224,7 +1388,33 @@
       userLink.className = "user-link";
       userLink.href = profileUrl(friend.id);
       userLink.textContent = friend.name ? `@${friend.name}` : `#${friend.id}`;
-      meta.append(nameLink, userLink);
+
+      const presenceEl = presence.href
+        ? document.createElement("a")
+        : document.createElement("span");
+      presenceEl.className = `presence-link ${presence.key}`;
+      if (presence.href) {
+        /** @type {HTMLAnchorElement} */ (presenceEl).href = presence.href;
+        /** @type {HTMLAnchorElement} */ (presenceEl).target = "_blank";
+        /** @type {HTMLAnchorElement} */ (presenceEl).rel = "noopener noreferrer";
+        presenceEl.title =
+          presence.key === "ingame" && presence.placeId
+            ? `Open game${presence.text && presence.text !== presence.label ? `: ${presence.text}` : ""}`
+            : `Open profile (${presence.label})`;
+      } else {
+        presenceEl.title = presence.label;
+      }
+      const presenceMark = document.createElement("span");
+      presenceMark.className = "presence-mark";
+      presenceMark.setAttribute("aria-hidden", "true");
+      const presenceText = document.createElement("span");
+      presenceText.textContent =
+        presence.key === "ingame" && presence.text !== presence.label
+          ? `Playing ${presence.text}`
+          : presence.text;
+      presenceEl.append(presenceMark, presenceText);
+
+      meta.append(nameLink, userLink, presenceEl);
 
       const menuWrap = document.createElement("div");
       menuWrap.className = "rbx-bulk-menu-wrap";
@@ -1276,6 +1466,11 @@
         if (!ok) return;
         location.assign(profileUrl(friend.id));
       });
+      if (presence.key === "ingame" && presence.placeId) {
+        addItem("Open game", async () => {
+          location.assign(`https://www.roblox.com/games/${presence.placeId}`);
+        });
+      }
       addItem("Chat", () => openChatWithUser(friend.id));
       addItem("Copy username", async () => {
         const ok = await showConfirm({
@@ -1334,7 +1529,7 @@
       });
 
       menuWrap.append(menuBtn, menu);
-      li.append(cb, avatarLink, meta, menuWrap);
+      li.append(cb, avatarWrap, meta, menuWrap);
       list.appendChild(li);
     }
   }
@@ -1393,17 +1588,26 @@
       }
 
       const ids = items.map((x) => x.id);
-      const [enrich, followingMap] = await Promise.all([
+      const [enrich, followingMap, presenceMap] = await Promise.all([
         enrichUsers(ids),
         fetchFollowingMap(ids),
+        fetchPresenceMap(ids),
       ]);
-      currentFriends = items.map((item) => ({
-        id: item.id,
-        name: enrich[item.id]?.name,
-        displayName: enrich[item.id]?.displayName,
-        imageUrl: enrich[item.id]?.imageUrl,
-        isFollowing: !!followingMap[item.id],
-      }));
+      currentFriends = items.map((item) => {
+        const presence = presenceMap[item.id];
+        return {
+          id: item.id,
+          name: enrich[item.id]?.name,
+          displayName: enrich[item.id]?.displayName,
+          imageUrl: enrich[item.id]?.imageUrl,
+          isFollowing: !!followingMap[item.id],
+          presenceType: presence?.presenceType ?? 0,
+          lastLocation: presence?.lastLocation || "",
+          placeId: presence?.placeId ?? null,
+          rootPlaceId: presence?.rootPlaceId ?? null,
+          universeId: presence?.universeId ?? null,
+        };
+      });
 
       const visible = new Set(ids);
       selectedIds = new Set([...selectedIds].filter((id) => visible.has(id)));

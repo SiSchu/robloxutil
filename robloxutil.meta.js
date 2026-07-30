@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Roblox Util
 // @namespace    https://github.com/SiSchu/robloxutil
-// @version      1.0.5
+// @version      1.0.6
 // @description  Loader for Roblox Util scripts (friends bulk unfriend + home game stats)
 // @author       SiSchu
 // @homepageURL  https://github.com/SiSchu/robloxutil
